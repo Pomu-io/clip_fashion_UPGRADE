@@ -8,7 +8,7 @@ WORKDIR /${CAS_NAME}
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# constant, wont invalidate cache
+# constant, won't invalidate cache
 LABEL org.opencontainers.image.vendor="Jina AI Limited" \
       org.opencontainers.image.licenses="Apache 2.0" \
       org.opencontainers.image.title="CLIP-as-Service" \
@@ -17,14 +17,21 @@ LABEL org.opencontainers.image.vendor="Jina AI Limited" \
       org.opencontainers.image.url="clip-as-service" \
       org.opencontainers.image.documentation="https://clip-as-service.jina.ai/"
 
-
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip wget \
     && ln -sf python3 /usr/bin/python \
     && ln -sf pip3 /usr/bin/pip \
     && pip install --upgrade pip \
-    && pip install wheel setuptools nvidia-pyindex \
-    && pip install torch torchvision torchaudio fashion-clip --extra-index-url https://download.pytorch.org/whl/cu116
+    && pip install wheel setuptools nvidia-pyindex
+
+# Install PyTorch and other dependencies with specific versions for compatibility
+RUN pip install torch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu116
+
+# Install additional dependencies for fashion-clip
+RUN pip install boto3 appdirs pandas pyarrow matplotlib python-dotenv annoy transformers ipyplot datasets validators
+
+# Install fashion-clip
+RUN pip install fashion-clip
 
 COPY server ./server
 # given by builder
