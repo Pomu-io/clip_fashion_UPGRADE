@@ -13,17 +13,14 @@ from clip_server.executors.helper import (
     split_img_txt_da,
 )
 from clip_server.helper import __cast_dtype__
-from clip_server.model import clip
-from clip_server.model.clip_model import CLIPModel
-from clip_server.model.tokenization import Tokenizer
 from jina import DocumentArray, Executor, requests
 from opentelemetry.trace import NoOpTracer, Span
-
+from fashion_clip.fashion_clip import FashionCLIP
 
 class CLIPEncoder(Executor):
     def __init__(
         self,
-        name: str = 'ViT-B-32::openai',
+        name: str = 'fashion-clip',
         device: Optional[str] = None,
         jit: bool = False,
         num_worker_preprocess: int = 4,
@@ -32,18 +29,6 @@ class CLIPEncoder(Executor):
         dtype: Optional[Union[str, torch.dtype]] = None,
         **kwargs,
     ):
-        """
-        :param name: The name of the model to be used. Default 'ViT-B-32::openai'. A list of available models can be
-            found at https://clip-as-service.jina.ai/user-guides/server/#model-support
-        :param device: 'cpu' or 'cuda'. Default is None, which auto-detects the device.
-        :param jit: Whether to use JIT compilation. Default is False.
-        :param num_worker_preprocess: The number of CPU workers to preprocess images and texts. Default is 4.
-        :param minibatch_size: The size of the minibatch for preprocessing and encoding. Default is 32. Reduce this
-            number if you encounter OOM errors.
-        :param access_paths: The access paths to traverse on the input documents to get the images and texts to be
-            processed. Visit https://docarray.jina.ai/fundamentals/documentarray/access-elements for more details.
-        :param dtype: inference data type, if None defaults to torch.float32 if device == 'cpu' else torch.float16.
-        """
         super().__init__(**kwargs)
 
         self._minibatch_size = minibatch_size
@@ -79,19 +64,14 @@ class CLIPEncoder(Executor):
                     f'sub-optimal performance.'
                 )
 
-            # NOTE: make sure to set the threads right after the torch import,
-            # and `torch.set_num_threads` always take precedence over environment variables `OMP_NUM_THREADS`.
-            # For more details, please see https://pytorch.org/docs/stable/generated/torch.set_num_threads.html
             torch.set_num_threads(max(num_threads, 1))
             torch.set_num_interop_threads(1)
 
         self._num_worker_preprocess = num_worker_preprocess
         self._pool = ThreadPool(processes=num_worker_preprocess)
 
-        self._model = CLIPModel(
-            name, device=self._device, jit=jit, dtype=dtype, **kwargs
-        )
-        self._tokenizer = Tokenizer(name)
+        # Initialize FashionCLIP
+        self._model = FashionCLIP(name)
         self._image_transform = clip._transform_blob(self._model.image_size)
 
         if not self.tracer:
@@ -191,7 +171,7 @@ class CLIPEncoder(Executor):
                                     documentation='images encode time in seconds',
                                 ):
                                     minibatch.embeddings = (
-                                        self._model.encode_image(**batch_data)
+                                        self._model.encode_images(**batch_data)
                                         .cpu()
                                         .numpy()
                                         .astype(np.float32)
@@ -215,7 +195,7 @@ class CLIPEncoder(Executor):
                                     documentation='texts encode time in seconds',
                                 ):
                                     minibatch.embeddings = (
-                                        self._model.encode_text(**batch_data)
+                                        self._model.encode_texts(**batch_data)
                                         .cpu()
                                         .numpy()
                                         .astype(np.float32)
